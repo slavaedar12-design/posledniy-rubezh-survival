@@ -1,193 +1,364 @@
-extends Node2D
-const PlayerScene = preload("res://scenes/Player.tscn")
-const EnemyScript = preload("res://scripts/enemies/enemy.gd")
-const SaveSystem = preload("res://scripts/save_system.gd")
+extends Node3D
+const PLAYER = preload("res://scenes/Player.tscn")
 var player
-var loot: Array[Dictionary] = []
-var touch_move := Vector2.ZERO
-var touch_origin := Vector2.ZERO
-var touch_id := -1
-var inventory_open := false
-var survival_tick := 0.0
-var autosave_tick := 0.0
-var recovery_tick := 0.0
-var message := "Черноград. День 1. Найдите припасы."
-var message_time := 5.0
-var hud: CanvasLayer
-var status_label: Label
-var message_label: Label
-var inventory_panel: Panel
-var inventory_label: Label
+var inventory = {"Дерево":0,"Камень":0,"Металл":0,"Ткань":0}
+var health=100.0
+var hunger=100.0
+var thirst=100.0
+var hud: Label
+var notice: Label
+var notice_text=""
+var notice_timer=0.0
+var building=false
+var preview: MeshInstance3D
 
-func _ready() -> void:
-    randomize()
-    player = PlayerScene.instantiate()
-    player.position = Vector2(640, 360)
+func _ready():
+    _input_setup()
+    _environment()
+    _ground()
+    _settlement()
+    _forest()
+    _loot()
+    player=PLAYER.instantiate()
     add_child(player)
-    player.main = self
-    _spawn_enemy(Vector2(850, 310), "Обычный заражённый")
-    _spawn_enemy(Vector2(400, 520), "Быстрый заражённый")
-    _spawn_enemy(Vector2(1020, 560), "Обычный заражённый")
-    _spawn_loot(Vector2(540, 260), "Бинт", 1)
-    _spawn_loot(Vector2(720, 490), "Консервы", 2)
-    _spawn_loot(Vector2(300, 300), "Вода", 1)
-    _build_hud()
-    SaveSystem.load_game(player)
+    player.global_position=Vector3(0,2,12)
+    player.main=self
+    _preview()
+    _ui()
+    Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
+    say("Ты на острове. Исследуй поселение, собирай ресурсы и строй убежище.")
 
-func _process(delta: float) -> void:
-    if message_time > 0.0:
-        message_time -= delta
-        message_label.text = message if message_time > 0.0 else ""
-    if is_instance_valid(player):
-        status_label.text = "ЗДОРОВЬЕ %d   ГОЛОД %d   ЖАЖДА %d   УРОВЕНЬ %d   ОПЫТ %d" % [player.health, player.hunger, player.thirst, player.level, player.xp]
-    if Input.is_action_just_pressed("inventory"): _toggle_inventory()
+func _input_setup():
+    var keys={"move_forward":KEY_W,"move_back":KEY_S,"move_left":KEY_A,"move_right":KEY_D,"sprint":KEY_SHIFT,"jump":KEY_SPACE,"interact":KEY_E,"inventory":KEY_TAB,"build":KEY_B}
+    for a in keys:
+        if not InputMap.has_action(a):
+            InputMap.add_action(a)
+            var e=InputEventKey.new()
+            e.physical_keycode=keys[a]
+            InputMap.action_add_event(a,e)
+    if not InputMap.has_action("attack"):
+        InputMap.add_action("attack")
+        var e=InputEventMouseButton.new()
+        e.button_index=MOUSE_BUTTON_LEFT
+        InputMap.action_add_event("attack",e)
+
+func _environment():
+    var env=Environment.new()
+    env.background_mode=Environment.BG_SKY
+    env.sky=Sky.new()
+    env.sky.sky_material=ProceduralSkyMaterial.new()
+    env.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_color=Color(0.62,0.68,0.75)
+    env.ambient_light_energy=0.8
+    env.fog_enabled=true
+    env.fog_light_color=Color("#aab9b4")
+    env.fog_density=0.0015
+    var we=WorldEnvironment.new()
+    we.environment=env
+    add_child(we)
+    var sun=DirectionalLight3D.new()
+    sun.rotation_degrees=Vector3(-48,-32,0)
+    sun.light_energy=1.25
+    sun.shadow_enabled=true
+    add_child(sun)
+
+func _ground():
+    var body=StaticBody3D.new()
+    add_child(body)
+    var mesh=MeshInstance3D.new()
+    var plane=PlaneMesh.new()
+    plane.size=Vector2(180,180)
+    mesh.mesh=plane
+    var mat=StandardMaterial3D.new()
+    mat.albedo_color=Color("#65794b")
+    mat.roughness=1.0
+    mesh.material_override=mat
+    body.add_child(mesh)
+    var col=CollisionShape3D.new()
+    var shape=BoxShape3D.new()
+    shape.size=Vector3(180,1,180)
+    col.shape=shape
+    col.position.y=-0.5
+    body.add_child(col)
+
+func _settlement():
+    _house(Vector3(-17,0,-15),Vector3(12,7,10),Color("#9b886b"))
+    _house(Vector3(14,0,-23),Vector3(10,6,9),Color("#777b76"))
+    _house(Vector3(31,0,9),Vector3(13,7,11),Color("#8b735b"))
+    _house(Vector3(-32,0,20),Vector3(11,6,9),Color("#8a8270"))
+    _house(Vector3(0,0,-43),Vector3(19,8,14),Color("#686e6b"))
+
+func _house(p:Vector3,s:Vector3,c:Color):
+    var root=StaticBody3D.new()
+    root.position=p+Vector3(0,s.y/2,0)
+    add_child(root)
+    var wall=StandardMaterial3D.new()
+    wall.albedo_color=c
+    var roof=StandardMaterial3D.new()
+    roof.albedo_color=Color("#414744")
+    var door=StandardMaterial3D.new()
+    door.albedo_color=Color("#493a2b")
+    _solid_box(root,Vector3(0,-s.y/2+0.2,0),Vector3(s.x,0.4,s.z),roof)
+    _solid_box(root,Vector3(0,0,-s.z/2),Vector3(s.x,s.y,0.35),wall)
+    _solid_box(root,Vector3(-s.x/2,0,0),Vector3(0.35,s.y,s.z),wall)
+    _solid_box(root,Vector3(s.x/2,0,0),Vector3(0.35,s.y,s.z),wall)
+    _solid_box(root,Vector3(0,0,s.z/2),Vector3(s.x,s.y,0.35),wall)
+    _solid_box(root,Vector3(0,s.y/2+0.35,0),Vector3(s.x+1,0.7,s.z+1),roof)
+    _solid_box(root,Vector3(0,-0.3,s.z/2+0.2),Vector3(1.7,3.4,0.15),door)
+    var glass=StandardMaterial3D.new()
+    glass.albedo_color=Color("#263d43")
+    _solid_box(root,Vector3(-s.x/2-0.02,0.8,0),Vector3(0.08,1.5,2),glass)
+
+func _solid_box(parent:Node3D,p:Vector3,s:Vector3,m:Material):
+    var mesh=MeshInstance3D.new()
+    var b=BoxMesh.new()
+    b.size=s
+    mesh.mesh=b
+    mesh.material_override=m
+    mesh.position=p
+    parent.add_child(mesh)
+    var col=CollisionShape3D.new()
+    var sh=BoxShape3D.new()
+    sh.size=s
+    col.shape=sh
+    col.position=p
+    parent.add_child(col)
+
+func _forest():
+    var rng=RandomNumberGenerator.new()
+    rng.randomize()
+    for i in range(130):
+        var p=Vector3(rng.randf_range(-82,82),0,rng.randf_range(-82,82))
+        if Vector2(p.x,p.z).length()<43: continue
+        _tree(p,rng.randf_range(0.8,1.35))
+
+func _tree(p:Vector3,k:float):
+    var root=StaticBody3D.new()
+    root.position=p
+    root.add_to_group("harvest")
+    root.set_meta("kind","Дерево")
+    root.set_meta("amount",4)
+    add_child(root)
+    var trunk=MeshInstance3D.new()
+    var cm=CylinderMesh.new()
+    cm.top_radius=0.2*k
+    cm.bottom_radius=0.32*k
+    cm.height=3.2*k
+    trunk.mesh=cm
+    var bark=StandardMaterial3D.new()
+    bark.albedo_color=Color("#594431")
+    trunk.material_override=bark
+    trunk.position.y=1.6*k
+    root.add_child(trunk)
+    var crown=MeshInstance3D.new()
+    var sm=SphereMesh.new()
+    sm.radius=1.55*k
+    sm.height=3.2*k
+    crown.mesh=sm
+    var green=StandardMaterial3D.new()
+    green.albedo_color=Color("#31583a")
+    crown.material_override=green
+    crown.position.y=3.5*k
+    root.add_child(crown)
+    var col=CollisionShape3D.new()
+    var cs=CylinderShape3D.new()
+    cs.radius=0.48*k
+    cs.height=3.2*k
+    col.shape=cs
+    col.position.y=1.6*k
+    root.add_child(col)
+
+func _loot():
+    var rng=RandomNumberGenerator.new()
+    rng.randomize()
+    for i in range(35):
+        var p=Vector3(rng.randf_range(-75,75),0,rng.randf_range(-75,75))
+        if Vector2(p.x,p.z).length()<14: p.x+=28
+        _rock(p,rng.randf_range(0.8,1.5))
+    for i in range(24):
+        _crate(Vector3(rng.randf_range(-40,40),0,rng.randf_range(-40,40)))
+
+func _rock(p:Vector3,k:float):
+    var root=StaticBody3D.new()
+    root.position=p
+    root.add_to_group("harvest")
+    root.set_meta("kind","Камень")
+    root.set_meta("amount",3)
+    add_child(root)
+    var mesh=MeshInstance3D.new()
+    var sm=SphereMesh.new()
+    sm.radius=k
+    sm.height=k*1.4
+    mesh.mesh=sm
+    mesh.scale=Vector3(1.3,0.8,1)
+    var m=StandardMaterial3D.new()
+    m.albedo_color=Color("#777a76")
+    mesh.material_override=m
+    mesh.position.y=k*0.55
+    root.add_child(mesh)
+    var col=CollisionShape3D.new()
+    var sh=SphereShape3D.new()
+    sh.radius=k
+    col.shape=sh
+    col.position.y=k*0.6
+    root.add_child(col)
+
+func _crate(p:Vector3):
+    var root=StaticBody3D.new()
+    root.position=p
+    root.add_to_group("harvest")
+    root.set_meta("kind","Ящик")
+    root.set_meta("amount",1)
+    add_child(root)
+    var mesh=MeshInstance3D.new()
+    var b=BoxMesh.new()
+    b.size=Vector3(1.3,1,1.1)
+    mesh.mesh=b
+    var m=StandardMaterial3D.new()
+    m.albedo_color=Color("#80613d")
+    mesh.material_override=m
+    mesh.position.y=0.5
+    root.add_child(mesh)
+    var col=CollisionShape3D.new()
+    var sh=BoxShape3D.new()
+    sh.size=b.size
+    col.shape=sh
+    col.position.y=0.5
+    root.add_child(col)
+
+func _preview():
+    preview=MeshInstance3D.new()
+    var b=BoxMesh.new()
+    b.size=Vector3(4,0.25,4)
+    preview.mesh=b
+    var m=StandardMaterial3D.new()
+    m.albedo_color=Color(0.2,0.8,0.35,0.45)
+    m.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+    preview.material_override=m
+    preview.visible=false
+    add_child(preview)
+
+func _process(delta):
+    hunger=maxf(0,hunger-delta*0.035)
+    thirst=maxf(0,thirst-delta*0.055)
+    if hunger<=0 or thirst<=0: health=maxf(0,health-delta*1.5)
+    if notice_timer>0:
+        notice_timer-=delta
+        notice.text=notice_text if notice_timer>0 else ""
+    hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
+    if building:
+        var target=player.global_position-player.global_transform.basis.z*5
+        preview.global_position=Vector3(round(target.x/2)*2,0.15,round(target.z/2)*2)
     if Input.is_action_just_pressed("interact"): _interact()
-    if Input.is_action_just_pressed("attack"): player.try_attack()
-    survival_tick += delta
-    autosave_tick += delta
-    recovery_tick += delta
-    if recovery_tick >= 4.0:
-        recovery_tick = 0.0
-        player.energy = mini(100, player.energy + 2)
-    if survival_tick >= 45.0:
-        survival_tick = 0.0
-        player.hunger = maxi(0, player.hunger - 1)
-        player.thirst = maxi(0, player.thirst - 1)
-        if player.hunger <= 0 or player.thirst <= 0: player.take_damage(2)
-    if autosave_tick >= 30.0:
-        autosave_tick = 0.0
-        SaveSystem.save_game(player)
+    if Input.is_action_just_pressed("inventory"): say("РЮКЗАК: "+str(inventory))
+    if Input.is_action_just_pressed("build"):
+        building=not building
+        preview.visible=building
+        say("Режим строительства включён" if building else "Строительство выключено")
+    if building and Input.is_action_just_pressed("attack"): _place_wall()
 
-func _draw() -> void:
-    draw_rect(Rect2(0, 0, 1280, 720), Color("#202a27"))
-    draw_rect(Rect2(0, 310, 1280, 130), Color("#343a38"))
-    draw_rect(Rect2(580, 0, 125, 720), Color("#343a38"))
-    for x in range(0, 1280, 90): draw_line(Vector2(x, 375), Vector2(x + 45, 375), Color("#8a8062"), 3)
-    _building(Rect2(65, 55, 300, 205), "ЖИЛОЙ ДОМ")
-    _building(Rect2(790, 55, 390, 190), "ЗАБРОШЕННЫЙ МАГАЗИН")
-    _building(Rect2(70, 500, 260, 155), "ГАРАЖ")
-    _building(Rect2(850, 490, 330, 170), "СКЛАД")
-    for entry in loot:
-        if not entry.taken: draw_circle(entry.pos, 9, Color("#e4b45e"))
-
-func _building(rect: Rect2, label: String) -> void:
-    draw_rect(rect, Color("#414845"))
-    draw_rect(rect, Color("#68716a"), false, 5)
-    for x in range(int(rect.position.x + 28), int(rect.end.x - 20), 72):
-        draw_rect(Rect2(x, rect.position.y + 35, 36, 42), Color("#202b2c"))
-    draw_string(ThemeDB.fallback_font, rect.position + Vector2(12, rect.size.y - 15), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#c2bca7"))
-
-func _spawn_enemy(pos: Vector2, kind: String) -> void:
-    var enemy := CharacterBody2D.new()
-    enemy.set_script(EnemyScript)
-    enemy.position = pos
-    enemy.enemy_name = kind
-    add_child(enemy)
-    enemy.target = player
-
-func _spawn_loot(pos: Vector2, item: String, amount: int) -> void:
-    loot.append({"pos": pos, "item": item, "amount": amount, "taken": false})
-    queue_redraw()
-
-func _build_hud() -> void:
-    hud = CanvasLayer.new()
-    add_child(hud)
-    var top := Panel.new()
-    top.position = Vector2(14, 12)
-    top.size = Vector2(620, 48)
-    hud.add_child(top)
-    status_label = Label.new()
-    status_label.position = Vector2(12, 8)
-    status_label.size = Vector2(600, 32)
-    status_label.add_theme_font_size_override("font_size", 16)
-    top.add_child(status_label)
-    message_label = Label.new()
-    message_label.position = Vector2(14, 70)
-    message_label.size = Vector2(800, 32)
-    message_label.add_theme_font_size_override("font_size", 18)
-    hud.add_child(message_label)
-    _add_button("УДАР", Vector2(1090, 570), Vector2(150, 62), func(): player.try_attack())
-    _add_button("ОБЫСКАТЬ [E]", Vector2(900, 645), Vector2(210, 48), _interact)
-    _add_button("РЮКЗАК [I]", Vector2(1110, 645), Vector2(150, 48), _toggle_inventory)
-    _add_button("СОХРАНИТЬ", Vector2(14, 650), Vector2(150, 42), _save_game)
-    inventory_panel = Panel.new()
-    inventory_panel.position = Vector2(380, 145)
-    inventory_panel.size = Vector2(520, 420)
-    inventory_panel.visible = false
-    hud.add_child(inventory_panel)
-    inventory_label = Label.new()
-    inventory_label.position = Vector2(24, 22)
-    inventory_label.size = Vector2(470, 300)
-    inventory_panel.add_child(inventory_label)
-    _add_button("БИНТ", Vector2(398, 505), Vector2(105, 42), func(): _use_inventory_item("Бинт"))
-    _add_button("ЕДА", Vector2(510, 505), Vector2(105, 42), func(): _use_inventory_item("Консервы"))
-    _add_button("ВОДА", Vector2(622, 505), Vector2(105, 42), func(): _use_inventory_item("Вода"))
-
-func _add_button(caption: String, pos: Vector2, size: Vector2, action: Callable) -> void:
-    var b := Button.new()
-    b.text = caption
-    b.position = pos
-    b.size = size
-    b.pressed.connect(action)
-    hud.add_child(b)
-
-func _toggle_inventory() -> void:
-    inventory_open = not inventory_open
-    inventory_panel.visible = inventory_open
-    if inventory_open:
-        var lines := "РЮКЗАК ВЫЖИВШЕГО\n\n"
-        for item in player.inventory.keys(): lines += "• %s — %d\n" % [item, player.inventory[item]]
-        lines += "\nВместимость: %d / 20" % player.inventory.size()
-        inventory_label.text = lines
-
-func _use_inventory_item(item_name: String) -> void:
-    var before: int = int(player.inventory.get(item_name, 0))
-    if before <= 0:
-        _notify("В рюкзаке нет: %s" % item_name)
+func _interact():
+    var from=player.camera.global_position
+    var to=from-player.camera.global_transform.basis.z*5
+    var q=PhysicsRayQueryParameters3D.create(from,to)
+    q.exclude=[player.get_rid()]
+    var hit=get_world_3d().direct_space_state.intersect_ray(q)
+    if hit.is_empty():
+        say("Наведи прицел на дерево, камень или ящик.")
         return
-    player.use_item(item_name)
-    _notify("Использовано: %s" % item_name)
-    if inventory_open:
-        _toggle_inventory()
-        _toggle_inventory()
+    var obj=hit.collider
+    if obj is Node and obj.is_in_group("harvest"):
+        var kind=obj.get_meta("kind")
+        if kind=="Ящик":
+            inventory["Металл"]+=randi_range(1,3)
+            inventory["Ткань"]+=randi_range(0,2)
+            say("Ящик обыскан: найден металлолом и ткань.")
+        else:
+            inventory[kind]+=int(obj.get_meta("amount"))
+            say("Добыто: %s" % kind)
+        obj.queue_free()
+    else:
+        say("Здесь нечего собирать.")
 
-func _interact() -> void:
-    var index := -1
-    var nearest := 72.0
-    for i in range(loot.size()):
-        if loot[i].taken: continue
-        var d: float = player.global_position.distance_to(loot[i].pos)
-        if d < nearest: nearest = d; index = i
-    if index >= 0:
-        var item: Dictionary = loot[index]
-        loot[index].taken = true
-        player.add_item(item.item, int(item.amount))
-        _notify("Найдено: %s ×%d" % [item.item, item.amount])
-        queue_redraw()
-    else: _notify("Рядом нет припасов.")
+func _place_wall():
+    if inventory["Дерево"]<10:
+        say("Для стены нужно 10 дерева.")
+        return
+    inventory["Дерево"]-=10
+    var root=StaticBody3D.new()
+    root.position=preview.global_position+Vector3(0,1.5,0)
+    add_child(root)
+    var mat=StandardMaterial3D.new()
+    mat.albedo_color=Color("#806044")
+    _solid_box(root,Vector3.ZERO,Vector3(4,3,0.25),mat)
+    say("Деревянная стена построена.")
 
-func _notify(value: String) -> void:
-    message = value
-    message_time = 3.0
+func _ui():
+    var layer=CanvasLayer.new()
+    add_child(layer)
+    hud=Label.new()
+    hud.position=Vector2(22,18)
+    hud.add_theme_font_size_override("font_size",19)
+    hud.add_theme_color_override("font_color",Color("#fff2d8"))
+    layer.add_child(hud)
+    notice=Label.new()
+    notice.position=Vector2(22,90)
+    notice.add_theme_font_size_override("font_size",18)
+    notice.add_theme_color_override("font_color",Color("#ffd28a"))
+    layer.add_child(notice)
+    var cross=Label.new()
+    cross.text="+"
+    cross.set_anchors_preset(Control.PRESET_CENTER)
+    cross.add_theme_font_size_override("font_size",25)
+    layer.add_child(cross)
+    var help=Label.new()
+    help.text="WASD — ходьба   SHIFT — бег   E — сбор   B — стройка   TAB — рюкзак"
+    help.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+    help.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+    help.add_theme_color_override("font_color",Color.WHITE)
+    layer.add_child(help)
+    var gather=Button.new()
+    gather.text="СОБРАТЬ"
+    gather.anchor_left=1
+    gather.anchor_right=1
+    gather.anchor_top=1
+    gather.anchor_bottom=1
+    gather.offset_left=-160
+    gather.offset_top=-115
+    gather.offset_right=-20
+    gather.offset_bottom=-55
+    gather.pressed.connect(_interact)
+    layer.add_child(gather)
+    var build_btn=Button.new()
+    build_btn.text="СТРОИТЬ"
+    build_btn.anchor_left=1
+    build_btn.anchor_right=1
+    build_btn.anchor_top=1
+    build_btn.anchor_bottom=1
+    build_btn.offset_left=-160
+    build_btn.offset_top=-185
+    build_btn.offset_right=-20
+    build_btn.offset_bottom=-125
+    build_btn.pressed.connect(func():
+        building=not building
+        preview.visible=building
+    )
+    layer.add_child(build_btn)
 
-func _save_game() -> void:
-    SaveSystem.save_game(player)
-    _notify("Прогресс сохранён.")
+func say(t:String):
+    notice_text=t
+    notice_timer=4.0
+    if is_instance_valid(notice): notice.text=t
 
-func _input(event: InputEvent) -> void:
-    if event is InputEventScreenTouch:
-        if event.pressed and event.position.x < get_viewport_rect().size.x * 0.48:
-            touch_id = event.index
-            touch_origin = event.position
-            touch_move = Vector2.ZERO
-        elif not event.pressed and event.index == touch_id:
-            touch_id = -1
-            touch_move = Vector2.ZERO
-    elif event is InputEventScreenDrag and event.index == touch_id:
-        touch_move = ((event.position - touch_origin) / 55.0).limit_length(1.0)
-
-func get_touch_move() -> Vector2:
-    return touch_move
-
-func _notification(what: int) -> void:
-    if what == NOTIFICATION_WM_CLOSE_REQUEST: _save_game()
+func _input(event):
+    if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
+        player.rotate_camera(event.relative)
+    elif event is InputEventScreenDrag:
+        if event.position.x>get_viewport().get_visible_rect().size.x*0.45:
+            player.rotate_camera(event.relative)
+        else:
+            player.set_touch_move((event.relative/65.0).limit_length(1))
+    elif event is InputEventScreenTouch and not event.pressed:
+        player.set_touch_move(Vector2.ZERO)
+    elif event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE:
+        Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
