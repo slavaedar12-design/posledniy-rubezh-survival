@@ -18,6 +18,8 @@ func _physics_process(delta: float) -> void:
     if is_instance_valid(main): direction += main.get_touch_move()
     velocity = direction.limit_length() * (speed if energy > 0 else speed * 0.65)
     move_and_slide()
+    global_position.x = clampf(global_position.x, 18.0, 1262.0)
+    global_position.y = clampf(global_position.y, 18.0, 702.0)
     queue_redraw()
 
 func _draw() -> void:

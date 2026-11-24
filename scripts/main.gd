@@ -10,6 +10,7 @@ var touch_id := -1
 var inventory_open := false
 var survival_tick := 0.0
 var autosave_tick := 0.0
+var recovery_tick := 0.0
 var message := "Черноград. День 1. Найдите припасы."
 var message_time := 5.0
 var hud: CanvasLayer
@@ -44,6 +45,10 @@ func _process(delta: float) -> void:
     if Input.is_action_just_pressed("attack"): player.try_attack()
     survival_tick += delta
     autosave_tick += delta
+    recovery_tick += delta
+    if recovery_tick >= 4.0:
+        recovery_tick = 0.0
+        player.energy = mini(100, player.energy + 2)
     if survival_tick >= 45.0:
         survival_tick = 0.0
         player.hunger = maxi(0, player.hunger - 1)
@@ -112,8 +117,11 @@ func _build_hud() -> void:
     hud.add_child(inventory_panel)
     inventory_label = Label.new()
     inventory_label.position = Vector2(24, 22)
-    inventory_label.size = Vector2(470, 370)
+    inventory_label.size = Vector2(470, 300)
     inventory_panel.add_child(inventory_label)
+    _add_button("БИНТ", Vector2(398, 505), Vector2(105, 42), func(): _use_inventory_item("Бинт"))
+    _add_button("ЕДА", Vector2(510, 505), Vector2(105, 42), func(): _use_inventory_item("Консервы"))
+    _add_button("ВОДА", Vector2(622, 505), Vector2(105, 42), func(): _use_inventory_item("Вода"))
 
 func _add_button(caption: String, pos: Vector2, size: Vector2, action: Callable) -> void:
     var b := Button.new()
@@ -131,6 +139,17 @@ func _toggle_inventory() -> void:
         for item in player.inventory.keys(): lines += "• %s — %d\n" % [item, player.inventory[item]]
         lines += "\nВместимость: %d / 20" % player.inventory.size()
         inventory_label.text = lines
+
+func _use_inventory_item(item_name: String) -> void:
+    var before: int = int(player.inventory.get(item_name, 0))
+    if before <= 0:
+        _notify("В рюкзаке нет: %s" % item_name)
+        return
+    player.use_item(item_name)
+    _notify("Использовано: %s" % item_name)
+    if inventory_open:
+        _toggle_inventory()
+        _toggle_inventory()
 
 func _interact() -> void:
     var index := -1
