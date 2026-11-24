@@ -30,7 +30,7 @@ jobs:
 
       - name: Установить компоненты Android SDK
         run: |
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager --sdk_root="$ANDROID_HOME" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
           yes | sdkmanager --licenses
 
       - name: Установить Godot и Android export templates
@@ -62,7 +62,7 @@ jobs:
         run: godot --headless --editor --path . --quit
 
       - name: Собрать отладочный APK (ARM64)
-        run: godot --headless --path . --export-debug "Android" build/posledniy-rubezh-debug.apk
+        run: godot --headless --verbose --path . --export-debug "Android" build/posledniy-rubezh-debug.apk
 
       - name: Проверить APK
         run: |
