@@ -54,7 +54,7 @@ func _ready() -> void:
 
     camera = Camera3D.new()
     camera.position = Vector3(0, 3.0, 6.8)
-    camera.rotation_degrees = Vector3(-15, 180, 0)
+    camera.rotation_degrees = Vector3(-15, 0, 0)
     camera.current = true
     camera.fov = 70
     add_child(camera)
