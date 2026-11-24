@@ -266,7 +266,7 @@ func _process(delta):
     if notice_timer>0:
         notice_timer-=delta
         notice.text=notice_text if notice_timer>0 else ""
-    hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
+    if is_instance_valid(hud):\n        hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
     if building:
         var target=player.global_position-player.global_transform.basis.z*5
         preview.global_position=Vector3(round(target.x/2)*2,0.15,round(target.z/2)*2)
