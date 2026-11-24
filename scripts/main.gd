@@ -262,21 +262,25 @@ func _preview():
 func _process(delta):
     hunger=maxf(0,hunger-delta*0.035)
     thirst=maxf(0,thirst-delta*0.055)
-    if hunger<=0 or thirst<=0: health=maxf(0,health-delta*1.5)
+    if hunger<=0 or thirst<=0:
+        health=maxf(0,health-delta*1.5)
     if notice_timer>0:
         notice_timer-=delta
-        notice.text=notice_text if notice_timer>0 else ""
-    if is_instance_valid(hud):\n        hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
+        if is_instance_valid(notice):
+            notice.text=notice_text if notice_timer>0 else ""
+    if is_instance_valid(hud):
+        hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
     if building:
         var target=player.global_position-player.global_transform.basis.z*5
         preview.global_position=Vector3(round(target.x/2)*2,0.15,round(target.z/2)*2)
-    if Input.is_action_just_pressed("interact"): _interact()
-    if Input.is_action_just_pressed("inventory"): say("РЮКЗАК: "+str(inventory))
+    if Input.is_action_just_pressed("interact"):
+        _interact()
+    if Input.is_action_just_pressed("inventory"):
+        say("РЮКЗАК: "+str(inventory))
     if Input.is_action_just_pressed("build"):
-        building=not building
-        preview.visible=building
-        say("Режим строительства включён" if building else "Строительство выключено")
-    if building and Input.is_action_just_pressed("attack"): _place_wall()
+        _toggle_building()
+    if building and Input.is_action_just_pressed("attack"):
+        _place_wall()
 
 func _interact():
     var from=player.camera.global_position
