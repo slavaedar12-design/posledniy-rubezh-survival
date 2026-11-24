@@ -15,6 +15,7 @@ var hud_panel: PanelContainer
 var help_label: Label
 var gather_button: Button
 var build_button: Button
+var texture_cache: Dictionary = {}
 
 func _ready():
     _input_setup()
@@ -436,6 +437,9 @@ func _toggle_building():
     say("Режим строительства включён" if building else "Строительство выключено")
 
 func _noise_texture(freq:float,octaves:int)->Texture2D:
+    var key=str(freq)+"_"+str(octaves)
+    if texture_cache.has(key):
+        return texture_cache[key]
     var noise=FastNoiseLite.new()
     noise.noise_type=FastNoiseLite.TYPE_SIMPLEX
     noise.frequency=freq
@@ -446,6 +450,7 @@ func _noise_texture(freq:float,octaves:int)->Texture2D:
     texture.height=256
     texture.seamless=true
     texture.noise=noise
+    texture_cache[key]=texture
     return texture
 
 func say(t:String):
