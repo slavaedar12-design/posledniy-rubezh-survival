@@ -269,7 +269,7 @@ func _process(delta):
         if is_instance_valid(notice):
             notice.text=notice_text if notice_timer>0 else ""
     if is_instance_valid(hud):
-        hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
+        hud.text="♥ %d     ГОЛОД %d     ЖАЖДА %d\nДЕРЕВО %d   КАМЕНЬ %d   МЕТАЛЛ %d   ТКАНЬ %d" % [int(health),int(hunger),int(thirst),inventory["Дерево"],inventory["Камень"],inventory["Металл"],inventory["Ткань"]]
     if building:
         var target=player.global_position-player.global_transform.basis.z*5
         preview.global_position=Vector3(round(target.x/2)*2,0.15,round(target.z/2)*2)
